@@ -5,3 +5,10 @@ test('renders header brand', () => {
   render(<App />);
   expect(screen.getByLabelText(/News Explorer Home/i)).toBeInTheDocument();
 });
+
+test('renders search control with button', () => {
+  render(<App />);
+  // Ensure the main search region and Search button are present
+  expect(screen.getByRole('search')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /search/i })).toBeInTheDocument();
+});

@@ -127,7 +127,7 @@ body {
   background: var(--surface);
   color: var(--text);
   border-radius: 12px;
-  padding: 12px 14px 12px 40px;
+  padding: 12px 38px 12px 40px; /* extra right padding for clear button */
   outline: none;
   transition: border 120ms ease, box-shadow 120ms ease;
 }
@@ -142,6 +142,13 @@ body {
   transform: translateY(-50%);
   color: var(--muted);
   font-size: 18px;
+}
+
+/* Ensure toolbar wraps nicely on mobile with search button visible */
+@media (max-width: 640px) {
+  .toolbar {
+    grid-template-columns: 1fr; /* stack search and buttons */
+  }
 }
 
 .btn {

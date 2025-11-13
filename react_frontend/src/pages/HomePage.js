@@ -65,7 +65,14 @@ export function HomePage() {
   return (
     <>
       <div className="toolbar" role="region" aria-label="Search and filters">
-        <SearchBar value={query} onChange={setQuery} />
+        <SearchBar
+          value={query}
+          onChange={setQuery}
+          onSearchImmediately={(q) => {
+            // Immediate search by updating state directly; effect on params will fetch
+            setQuery(q);
+          }}
+        />
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn" onClick={() => setFiltersOpen(true)} aria-haspopup="dialog" aria-expanded={filtersOpen}>
             Filters ⚙️
