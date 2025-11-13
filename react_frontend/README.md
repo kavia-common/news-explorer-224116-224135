@@ -1,82 +1,93 @@
-# Lightweight React Template for KAVIA
+# News Explorer - React Frontend
 
-This project provides a minimal React template with a clean, modern UI and minimal dependencies.
+A minimalist, responsive News Aggregator UI (Ocean Professional theme) that fetches articles from Newsdata.io, supports keyword search, filters, light/dark mode, and persistent bookmarks via Supabase (with local fallback).
 
 ## Features
 
-- **Lightweight**: No heavy UI frameworks - uses only vanilla CSS and React
-- **Modern UI**: Clean, responsive design with KAVIA brand styling
-- **Fast**: Minimal dependencies for quick loading times
-- **Simple**: Easy to understand and modify
+- Header with logo and tabs (Home, Bookmarks)
+- Category tabs: Top, Business, Technology, Sports, Entertainment, Health, Science
+- Debounced keyword search and filter drawer (date range, language, country)
+- Responsive card grid with images, source, and relative time
+- Article detail modal with link to source
+- Bookmark/unbookmark articles; dedicated Bookmarks page
+- Persistent theme (light/dark) preference
+- Loading skeletons, empty and error states
+- Client-side routing using React Router
 
-## Getting Started
+## Environment Variables
 
-In the project directory, you can run:
+Create a `.env` from `.env.example`:
 
-### `npm start`
+```
+REACT_APP_NODE_ENV=development
+REACT_APP_PORT=3000
 
-Runs the app in development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+REACT_APP_NEWSDATA_API_KEY=your_newsdata_api_key_here
+REACT_APP_API_BASE=https://newsdata.io/api/1
 
-### `npm test`
-
-Launches the test runner in interactive watch mode.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-## Customization
-
-### Colors
-
-The main brand colors are defined as CSS variables in `src/App.css`:
-
-```css
-:root {
-  --kavia-orange: #E87A41;
-  --kavia-dark: #1A1A1A;
-  --text-color: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.7);
-  --border-color: rgba(255, 255, 255, 0.1);
-}
+REACT_APP_SUPABASE_URL=https://your-project-id.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=your_anon_key_here
 ```
 
-### Components
+Notes:
+- If `REACT_APP_NEWSDATA_API_KEY` is omitted, the app shows a demo article and UI remains functional.
+- If Supabase env vars are omitted, bookmark operations fall back to localStorage.
 
-This template uses pure HTML/CSS components instead of a UI framework. You can find component styles in `src/App.css`. 
+## Supabase Setup
 
-Common components include:
-- Buttons (`.btn`, `.btn-large`)
-- Container (`.container`)
-- Navigation (`.navbar`)
-- Typography (`.title`, `.subtitle`, `.description`)
+1. Create a new Supabase project and obtain:
+   - REACT_APP_SUPABASE_URL
+   - REACT_APP_SUPABASE_ANON_KEY
 
-## Learn More
+2. Create the `bookmarks` table using SQL:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+```
+create table if not exists bookmarks (
+  id uuid primary key default gen_random_uuid(),
+  article_id text not null,
+  title text,
+  link text,
+  source text,
+  image_url text,
+  published_at text,
+  summary text,
+  created_at timestamp with time zone default now()
+);
+create unique index if not exists bookmarks_article_id_idx on bookmarks(article_id);
+```
 
-### Code Splitting
+3. Row Level Security (RLS) can be enabled with a permissive policy for anon for demo use. For production, configure auth and row-level policies appropriately.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Development
 
-### Analyzing the Bundle Size
+- Install dependencies:
+  npm install
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+- Run locally:
+  npm start
+Open http://localhost:3000
 
-### Making a Progressive Web App
+- Build:
+  npm run build
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Accessibility
 
-### Advanced Configuration
+- Semantic elements and aria attributes for navigation, search, dialogs
+- Keyboard-friendly interactions for opening/closing modal and toggling buttons
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+## Security
 
-### Deployment
+- No secrets are hardcoded; all configuration is via environment variables.
+- External API calls handled with basic retry and user-friendly error states.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+## Structure
 
-### `npm run build` fails to minify
+- src/services: API clients and bookmark service
+- src/hooks: useTheme, useLocalStorage, useDebounce
+- src/components: UI components
+- src/pages: Home and Bookmarks pages
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+## Troubleshooting
+
+- If you see only a demo article, set `REACT_APP_NEWSDATA_API_KEY`.
+- If bookmarks don't persist across sessions, configure Supabase env vars or use localStorage fallback.

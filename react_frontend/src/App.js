@@ -1,49 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import logo from './logo.svg';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
 import './App.css';
+import { useTheme } from './hooks/useTheme';
+import { HomePage } from './pages/HomePage';
+import { BookmarksPage } from './pages/BookmarksPage';
 
 // PUBLIC_INTERFACE
-function App() {
-  const [theme, setTheme] = useState('light');
-
-  // Effect to apply theme to document element
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
-
-  // PUBLIC_INTERFACE
-  const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
-  };
+export default function App() {
+  /** Root app wraps routes and header with theme */
+  const { theme, toggleTheme } = useTheme();
 
   return (
-    <div className="App">
-      <header className="App-header">
-        <button 
-          className="theme-toggle" 
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
-        </button>
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <p>
-          Current theme: <strong>{theme}</strong>
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="app" data-theme={theme} role="application">
+      <BrowserRouter>
+        <Header onToggleTheme={toggleTheme} theme={theme} />
+        <main className="page" aria-live="polite">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/bookmarks" element={<BookmarksPage />} />
+          </Routes>
+        </main>
+      </BrowserRouter>
     </div>
   );
 }
 
-export default App;
+function Header({ onToggleTheme, theme }) {
+  const location = useLocation();
+  const isBookmarks = location.pathname.startsWith('/bookmarks');
+
+  return (
+    <header className="header" role="banner">
+      <div className="header-inner">
+        <Link to="/" className="brand" aria-label="News Explorer Home">
+          <span className="brand-logo" aria-hidden="true"></span>
+          <span className="brand-name">News Explorer</span>
+        </Link>
+
+        <nav className="tabs" aria-label="Primary">
+          <TabLink to="/" label="Home" active={!isBookmarks} />
+          <TabLink to="/bookmarks" label="Bookmarks" active={isBookmarks} />
+        </nav>
+
+        <button className="btn" onClick={onToggleTheme} aria-label="Toggle theme">
+          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function TabLink({ to, label, active }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      className={`tab ${active ? 'active' : ''}`}
+      onClick={() => navigate(to)}
+      aria-pressed={active}
+    >
+      {label}
+    </button>
+  );
+}
