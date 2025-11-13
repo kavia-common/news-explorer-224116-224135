@@ -36,26 +36,6 @@ describe('newsdataClient param normalization, endpoint selection, and pagination
     expect(chooseEndpointPath(norm)).toBe('/latest');
   });
 
-  test('clamps future dates to today and keeps valid past dates', () => {
-    const tomorrow = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 10);
-    const today = new Date().toISOString().slice(0, 10);
-    const norm = normalizeParams({ from_date: '2020-01-01', to_date: tomorrow });
-    expect(norm.from_date).toBe('2020-01-01');
-    expect(norm.to_date).toBe(today);
-  });
-
-  test('swaps dates when from_date is after to_date', () => {
-    const norm = normalizeParams({ from_date: '2020-01-10', to_date: '2020-01-01' });
-    expect(norm.from_date).toBe('2020-01-01');
-    expect(norm.to_date).toBe('2020-01-10');
-  });
-
-  test('drops invalid date formats', () => {
-    const norm = normalizeParams({ from_date: 'invalid', to_date: 'also-bad' });
-    expect(norm.from_date).toBeUndefined();
-    expect(norm.to_date).toBeUndefined();
-  });
-
   test('tokenParam uses "page" for both numeric and opaque tokens', () => {
     expect(tokenParam(2)).toEqual({ key: 'page', value: '2' });
     expect(tokenParam('3')).toEqual({ key: 'page', value: '3' });

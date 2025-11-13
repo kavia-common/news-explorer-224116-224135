@@ -45,15 +45,13 @@ export function HomePage() {
       q: (query || '').trim() || undefined,
       language: filters.language || undefined,
       country: filters.country || undefined,
-      from_date: filters.from_date || undefined,
-      to_date: filters.to_date || undefined,
     };
   }, [category, query, filters]);
 
   // Helper to compute endpoint key to detect /latest vs /news changes
   const endpointKey = useMemo(() => {
     const hasQuery = !!(params.q);
-    const hasFilters = !!(params.language || params.country || params.from_date || params.to_date);
+    const hasFilters = !!(params.language || params.country);
     const hasCategory = !!(params.category);
     return (!hasQuery && !hasFilters && !hasCategory) ? 'latest' : 'news';
   }, [params]);
@@ -68,7 +66,7 @@ export function HomePage() {
     }
     lastEndpointRef.current = endpointKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpointKey, params.q, params.language, params.country, params.from_date, params.to_date, params.category]);
+  }, [endpointKey, params.q, params.language, params.country, params.category]);
 
   // Load first page (no token)
   useEffect(() => {

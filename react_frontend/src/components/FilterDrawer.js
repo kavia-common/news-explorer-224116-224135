@@ -1,6 +1,6 @@
  /**
   * PUBLIC_INTERFACE
-  * FilterDrawer - Right side drawer for filters like date, language, and country.
+  * FilterDrawer - Right side drawer for language and country filters.
   *
   * Accessibility model:
   * - When open: render as role="dialog" with aria-modal="true", move focus to first focusable control,
@@ -12,7 +12,7 @@
   * - open: boolean - controls visibility
   * - onClose: () => void - closes the drawer; parent should restore focus to the trigger if desired
   * - onApply: (filters) => void - applies selected filters
-  * - initial: { language?: string, country?: string, from_date?: string, to_date?: string }
+  * - initial: { language?: string, country?: string }
   */
  import React, { useEffect, useRef, useState, useCallback } from 'react';
  
@@ -21,8 +21,6 @@
    const [form, setForm] = useState({
      language: initial?.language || '',
      country: initial?.country || '',
-     from_date: initial?.from_date || '',
-     to_date: initial?.to_date || ''
    });
  
    const drawerRef = useRef(null);
@@ -34,8 +32,6 @@
      setForm({
        language: initial?.language || '',
        country: initial?.country || '',
-       from_date: initial?.from_date || '',
-       to_date: initial?.to_date || ''
      });
    }, [initial, open]);
  
@@ -141,29 +137,11 @@
              <option value="in">India</option>
            </select>
          </label>
-         <label>
-           <div>From date</div>
-           <input
-             className="input"
-             type="date"
-             value={form.from_date}
-             onChange={(e) => update('from_date', e.target.value)}
-           />
-         </label>
-         <label>
-           <div>To date</div>
-           <input
-             className="input"
-             type="date"
-             value={form.to_date}
-             onChange={(e) => update('to_date', e.target.value)}
-           />
-         </label>
          <div style={{ display: 'flex', gap: 8 }}>
            <button
              className="btn"
              onClick={() => {
-               const cleared = { language: '', country: '', from_date: '', to_date: '' };
+               const cleared = { language: '', country: '' };
                setForm(cleared);
                onApply?.(cleared);
              }}

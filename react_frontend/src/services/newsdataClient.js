@@ -63,9 +63,8 @@
   * Normalize incoming params and remove empty values.
   * - category: treat "all", "", null, undefined as no category
   * - q: trim and drop if empty
-  * - language/country/from_date/to_date: drop if empty
+  * - language/country: drop if empty
   * - token: opaque pagination token (string or numeric). We do NOT synthesize or increment numeric pages here.
-  * - Date guards: ensure from_date <= to_date when both present; clamp any future date to today
   */
  function normalizeParams(params = {}) {
    const {
@@ -73,31 +72,8 @@
      q,
      language,
      country,
-     from_date,
-     to_date,
      token, // pagination token provided by API's previous response (e.g., nextPage)
    } = params || {};
- 
-   const clampToToday = (d) => {
-     if (!d) return undefined;
-     const today = new Date();
-     const dObj = new Date(d);
-     if (Number.isNaN(dObj.getTime())) return undefined;
-     const todayYMD = today.toISOString().slice(0, 10);
-     const dYMD = dObj.toISOString().slice(0, 10);
-     return dYMD > todayYMD ? todayYMD : dYMD;
-   };
- 
-   let fd = from_date || undefined;
-   let td = to_date || undefined;
-   fd = clampToToday(fd);
-   td = clampToToday(td);
- 
-   if (fd && td && fd > td) {
-     const tmp = fd;
-     fd = td;
-     td = tmp;
-   }
  
    const normalized = {
      category:
@@ -107,8 +83,6 @@
      q: typeof q === 'string' && q.trim().length > 0 ? q.trim() : undefined,
      language: language || undefined,
      country: country || undefined,
-     from_date: fd,
-     to_date: td,
      token: typeof token === 'string' && token.trim() !== '' ? token.trim() : (Number.isFinite(Number(token)) ? String(token) : undefined),
    };
  
@@ -129,13 +103,13 @@
  
  /**
   * Decide endpoint path according to normalized params:
-  * - If there is no q and no filters (language, country, from_date, to_date), and category is absent,
+  * - If there is no q and no filters (language, country), and category is absent,
   *   then use "/latest".
   * - Otherwise use "/news".
   */
  function chooseEndpointPath(norm) {
    const hasQuery = !!norm.q;
-   const hasFilters = !!(norm.language || norm.country || norm.from_date || norm.to_date);
+   const hasFilters = !!(norm.language || norm.country);
    const hasCategory = !!norm.category;
    if (!hasQuery && !hasFilters && !hasCategory) return '/latest';
    return '/news';
@@ -165,7 +139,7 @@
   * Behavior:
   * - Uses token-based pagination: pass provided token using tokenParam().
   * - /latest: only apikey and optional language/country; avoids unsupported fields.
-  * - /news: include non-empty params.
+  * - /news: include non-empty params (dates removed).
   * - If API returns UnsupportedFilter or message about invalid next page, automatically retry once without token.
   *
   * Params:
@@ -173,8 +147,6 @@
   * - q?: string
   * - language?: string
   * - country?: string
-  * - from_date?: string (YYYY-MM-DD)
-  * - to_date?: string (YYYY-MM-DD)
   * - token?: string | number (pagination cursor from previous response.nextPage)
   *
   * Returns:
@@ -195,8 +167,6 @@
      if (norm.q) query.q = norm.q;
      if (norm.language) query.language = norm.language;
      if (norm.country) query.country = norm.country;
-     if (norm.from_date) query.from_date = norm.from_date;
-     if (norm.to_date) query.to_date = norm.to_date;
    }
    // Attach token if present using the correct key
    const tokenKV = tokenParam(norm.token);

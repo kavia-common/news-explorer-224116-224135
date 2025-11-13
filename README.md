@@ -7,4 +7,6 @@ News Explorer is a minimalist, responsive React app to explore news by categorie
 - Routing: React Router v6
 - Styling: Custom CSS with CSS variables
 
+Note: Date range filtering has been removed. Language and country filters remain available.
+
 See react_frontend/README.md for detailed setup.

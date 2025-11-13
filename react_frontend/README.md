@@ -1,12 +1,12 @@
 # News Explorer - React Frontend
 
-A minimalist, responsive News Aggregator UI (Ocean Professional theme) that fetches articles from Newsdata.io, supports keyword search, filters, light/dark mode, and persistent bookmarks via Supabase (with local fallback).
+A minimalist, responsive News Aggregator UI (Ocean Professional theme) that fetches articles from Newsdata.io, supports keyword search, language/country filters, light/dark mode, and persistent bookmarks via Supabase (with local fallback).
 
 ## Features
 
 - Header with logo and tabs (Home, Bookmarks)
 - Category tabs: Top, Business, Technology, Sports, Entertainment, Health, Science
-- Debounced keyword search and filter drawer (date range, language, country)
+- Debounced keyword search and filter drawer (language, country)
 - Responsive card grid with images, source, and relative time
 - Article detail modal with link to source
 - Bookmark/unbookmark articles; dedicated Bookmarks page
@@ -48,12 +48,11 @@ To avoid 422 Unprocessable Entity errors from Newsdata.io, the client applies st
 - `/latest` parameters:
   - Only `apikey`, `page` are always sent.
   - `language` and `country` are included only if specified.
-  - `category`, `from_date`, and `to_date` are never sent to `/latest`.
+  - `category` is never sent to `/latest`.
 
 - `/news` parameters:
   - Include only non-empty filters. `q` is optional; included only when provided.
-  - Dates are optional. If both are present and `from_date > to_date`, they are swapped.
-  - Any future date is clamped to today.
+  - Date filters have been removed from the app and are never sent.
   - Empty strings are removed from the query.
 
 - Error handling:
