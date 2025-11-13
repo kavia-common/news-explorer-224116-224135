@@ -22,15 +22,19 @@ Create a `.env` from `.env.example`:
 REACT_APP_NODE_ENV=development
 REACT_APP_PORT=3000
 
+# Newsdata.io configuration
 REACT_APP_NEWSDATA_API_KEY=your_newsdata_api_key_here
-REACT_APP_API_BASE=https://newsdata.io/api/1
+# Optional: override base URL (defaults to https://newsdata.io/api/1)
+REACT_APP_NEWSDATA_BASE_URL=https://newsdata.io/api/1
 
+# Supabase (optional for bookmarks persistence; falls back to localStorage if omitted)
 REACT_APP_SUPABASE_URL=https://your-project-id.supabase.co
 REACT_APP_SUPABASE_ANON_KEY=your_anon_key_here
 ```
 
 Notes:
 - If `REACT_APP_NEWSDATA_API_KEY` is omitted, the app shows a demo article and UI remains functional.
+- If `REACT_APP_NEWSDATA_BASE_URL` is omitted, the client uses the canonical `https://newsdata.io/api/1`.
 - If Supabase env vars are omitted, bookmark operations fall back to localStorage.
 
 ## Supabase Setup
