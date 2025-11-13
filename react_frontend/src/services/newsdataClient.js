@@ -8,10 +8,12 @@
   *
   * Notes:
   * - Endpoint selection: use /latest for homepage feed (no category/query/filters); /news otherwise.
-  * - For /latest: send only supported params (apikey, page; optionally language/country if endpoint supports),
-  *   never send from_date/to_date/category to avoid 422.
-  * - For /news: include only non-empty filters; ensure from_date <= to_date; clamp future dates to today.
-  *   q is optional here unless Newsdata requires it; we include q only when provided.
+  * - Pagination: Use API-provided token (nextPage) instead of numeric page counters.
+  *   When API returns a numeric page value, pass it as "page"; otherwise, pass the token using the exact key
+  *   the API expects (commonly "page" for token as well, but we mirror what API returns via tokenParamName).
+  * - Reset pagination token whenever any filter/query changes or switching endpoints.
+  * - If API responds with "UnsupportedFilter" or guidance indicating invalid next page value:
+  *   clear the pagination token and retry once without the token.
   */
  const DEFAULT_BASE = 'https://newsdata.io/api/1';
  const BASE = process.env.REACT_APP_NEWSDATA_BASE_URL || DEFAULT_BASE;
@@ -19,12 +21,12 @@
  
  /**
   * Transform a fetch Response into a rich error with message body when available.
+  * Includes surfaced API pagination guidance when present.
   */
  async function toApiError(res) {
    let details = '';
    try {
      const json = await res.json();
-     // Newsdata typically returns fields like status,message,results: []
      details = json?.message || json?.error || JSON.stringify(json);
    } catch {
      try {
@@ -36,6 +38,15 @@
    const err = new Error(`HTTP ${res.status}${details ? ` - ${details}` : ''}`);
    err.status = res.status;
    err.details = details;
+   // Surface common Newsdata pagination guidance hints
+   if (typeof err.details === 'string') {
+     if (err.details.toLowerCase().includes('unsupportedfilter')) {
+       err.code = 'UnsupportedFilter';
+     }
+     if (err.details.toLowerCase().includes('next page') || err.details.toLowerCase().includes('pagination')) {
+       err.paginationHint = true;
+     }
+   }
    return err;
  }
  
@@ -53,7 +64,7 @@
   * - category: treat "all", "", null, undefined as no category
   * - q: trim and drop if empty
   * - language/country/from_date/to_date: drop if empty
-  * - page: default to 1
+  * - token: opaque pagination token (string or numeric). We do NOT synthesize or increment numeric pages here.
   * - Date guards: ensure from_date <= to_date when both present; clamp any future date to today
   */
  function normalizeParams(params = {}) {
@@ -64,10 +75,9 @@
      country,
      from_date,
      to_date,
-     page,
+     token, // pagination token provided by API's previous response (e.g., nextPage)
    } = params || {};
  
-   // helper to clamp YYYY-MM-DD to today if in the future
    const clampToToday = (d) => {
      if (!d) return undefined;
      const today = new Date();
@@ -83,7 +93,6 @@
    fd = clampToToday(fd);
    td = clampToToday(td);
  
-   // If both dates exist and out of order, swap them
    if (fd && td && fd > td) {
      const tmp = fd;
      fd = td;
@@ -100,7 +109,7 @@
      country: country || undefined,
      from_date: fd,
      to_date: td,
-     page: Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1,
+     token: typeof token === 'string' && token.trim() !== '' ? token.trim() : (Number.isFinite(Number(token)) ? String(token) : undefined),
    };
  
    return normalized;
@@ -133,14 +142,31 @@
  }
  
  /**
+  * Decide which parameter key should carry the pagination token.
+  * Newsdata currently uses "page" for both numeric and token-like cursors on v1.
+  * However, to be robust per request: prefer numeric page only if token is a finite number,
+  * otherwise send the opaque token also under "page" unless future API indicates "nextPage" as the query parameter.
+  * This helper returns { key, value } where key is 'page' by default.
+  */
+ function tokenParam(token) {
+   if (token == null) return undefined;
+   const asNumber = Number(token);
+   if (Number.isFinite(asNumber) && `${asNumber}` === String(token)) {
+     return { key: 'page', value: String(asNumber) };
+   }
+   // Opaque token; Newsdata often still expects it as "page"
+   return { key: 'page', value: String(token) };
+ }
+ 
+ /**
   * PUBLIC_INTERFACE
-  * fetchArticles - Fetch articles from Newsdata.io with safe parameterization and error surfacing.
+  * fetchArticles - Fetch articles from Newsdata.io with token-based pagination and surfaced errors.
   *
   * Behavior:
-  * - /latest: only apikey, page, and optionally language/country. Never send category/from_date/to_date.
-  * - /news: include non-empty params. q is optional and only included when provided.
-  * - Dates are optional; if both provided and out of order, they are swapped; future dates clamped to today.
-  * - Empty or unsupported params are removed to avoid 422 errors.
+  * - Uses token-based pagination: pass provided token using tokenParam().
+  * - /latest: only apikey and optional language/country; avoids unsupported fields.
+  * - /news: include non-empty params.
+  * - If API returns UnsupportedFilter or message about invalid next page, automatically retry once without token.
   *
   * Params:
   * - category?: string | 'all'
@@ -149,10 +175,10 @@
   * - country?: string
   * - from_date?: string (YYYY-MM-DD)
   * - to_date?: string (YYYY-MM-DD)
-  * - page?: number (pagination)
+  * - token?: string | number (pagination cursor from previous response.nextPage)
   *
-  * Returns JSON from Newsdata or mock results when API key is missing.
-  * Throws Error with message containing API error details for UI surfacing.
+  * Returns:
+  * - JSON response from API (should contain "results", and possibly "nextPage" token)
   */
  export async function fetchArticles(params = {}) {
    const base = BASE || DEFAULT_BASE;
@@ -160,14 +186,11 @@
    const path = chooseEndpointPath(norm);
  
    // Construct query respecting endpoint capabilities
-   let query = { page: norm.page };
+   let query = {};
    if (path === '/latest') {
-     // Supported params for /latest: apikey, page; some accounts support language/country
      if (norm.language) query.language = norm.language;
      if (norm.country) query.country = norm.country;
-     // Explicitly avoid: category, from_date, to_date
    } else {
-     // /news supports filters
      if (norm.category) query.category = norm.category;
      if (norm.q) query.q = norm.q;
      if (norm.language) query.language = norm.language;
@@ -175,11 +198,15 @@
      if (norm.from_date) query.from_date = norm.from_date;
      if (norm.to_date) query.to_date = norm.to_date;
    }
+   // Attach token if present using the correct key
+   const tokenKV = tokenParam(norm.token);
+   if (tokenKV) {
+     query[tokenKV.key] = tokenKV.value;
+   }
  
    const url = `${base.replace(/\/$/, '')}${path}?${buildParams(query)}`;
  
    if (!API_KEY) {
-     // Fallback mock data to allow UI previews without key
      return {
        results: [
          {
@@ -191,12 +218,37 @@
            image_url: '',
            content: 'Add your API key to .env to fetch real articles.'
          }
-       ]
+       ],
+       nextPage: undefined
      };
    }
  
-   // Avoid aggressive retries to prevent repeated 4xx. Let UI handle message.
-   return safeFetchJson(url);
+   try {
+     return await safeFetchJson(url);
+   } catch (err) {
+     // If UnsupportedFilter or invalid next page value -> retry once without token
+     const details = (err && err.details ? String(err.details) : '').toLowerCase();
+     const isUnsupported = err?.code === 'UnsupportedFilter' || details.includes('unsupportedfilter');
+     const invalidTokenMsg = details.includes('invalid') && (details.includes('next page') || details.includes('nextpage'));
+     if ((isUnsupported || invalidTokenMsg) && tokenKV) {
+       // Retry once without token to avoid stale cursor
+       const queryNoToken = { ...query };
+       delete queryNoToken[tokenKV.key];
+       const retryUrl = `${base.replace(/\/$/, '')}${path}?${buildParams(queryNoToken)}`;
+       try {
+         return await safeFetchJson(retryUrl);
+       } catch (e2) {
+         // Enhance message with guidance from first error
+         e2.details = `${e2.details || ''} (pagination hint: token was cleared after '${err.details || 'UnsupportedFilter'}')`.trim();
+         throw e2;
+       }
+     }
+     // Surface pagination guidance hints
+     if (err?.paginationHint) {
+       err.message = `${err.message} (Tip: pagination token may be invalid or expired. Try reloading or updating filters.)`;
+     }
+     throw err;
+   }
  }
  
  // PUBLIC_INTERFACE
@@ -204,4 +256,5 @@
  export const __test__ = {
    normalizeParams,
    chooseEndpointPath,
+   tokenParam,
  };
