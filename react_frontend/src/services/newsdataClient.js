@@ -1,36 +1,51 @@
  /**
   * PUBLIC_INTERFACE
-  * newsdataClient - Client for Newsdata.io API with retries and query helpers.
+  * newsdataClient - Client for Newsdata.io API with guarded params and surfaced errors.
   *
   * Env:
   * - REACT_APP_NEWSDATA_API_KEY (required for live calls)
   * - REACT_APP_NEWSDATA_BASE_URL (defaults to https://newsdata.io/api/1)
   *
   * Notes:
-  * - We avoid any hardcoded preview domains; base URL is configurable.
-  * - If BASE_URL is missing, we default to the canonical Newsdata endpoint and proceed.
-  * - Endpoint selection: use /latest when no query or filters are set; otherwise use /news.
+  * - Endpoint selection: use /latest for homepage feed (no category/query/filters); /news otherwise.
+  * - For /latest: send only supported params (apikey, page; optionally language/country if endpoint supports),
+  *   never send from_date/to_date/category to avoid 422.
+  * - For /news: include only non-empty filters; ensure from_date <= to_date; clamp future dates to today.
+  *   q is optional here unless Newsdata requires it; we include q only when provided.
   */
  const DEFAULT_BASE = 'https://newsdata.io/api/1';
  const BASE = process.env.REACT_APP_NEWSDATA_BASE_URL || DEFAULT_BASE;
  const API_KEY = process.env.REACT_APP_NEWSDATA_API_KEY;
  
- /** Basic exponential backoff retry */
- async function fetchWithRetry(url, opts = {}, retries = 2, backoffMs = 600) {
-   let attempt = 0;
-   for (;;) {
+ /**
+  * Transform a fetch Response into a rich error with message body when available.
+  */
+ async function toApiError(res) {
+   let details = '';
+   try {
+     const json = await res.json();
+     // Newsdata typically returns fields like status,message,results: []
+     details = json?.message || json?.error || JSON.stringify(json);
+   } catch {
      try {
-       const res = await fetch(url, opts);
-       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-       return await res.json();
-     } catch (e) {
-       if (attempt >= retries) {
-         throw e;
-       }
-       await new Promise((r) => setTimeout(r, backoffMs * Math.pow(2, attempt)));
-       attempt += 1;
+       details = await res.text();
+     } catch {
+       details = '';
      }
    }
+   const err = new Error(`HTTP ${res.status}${details ? ` - ${details}` : ''}`);
+   err.status = res.status;
+   err.details = details;
+   return err;
+ }
+ 
+ /** Basic fetch without aggressive retries; avoid repeating 4xx errors */
+ async function safeFetchJson(url, opts = {}) {
+   const res = await fetch(url, opts);
+   if (!res.ok) {
+     throw await toApiError(res);
+   }
+   return res.json();
  }
  
  /**
@@ -39,6 +54,7 @@
   * - q: trim and drop if empty
   * - language/country/from_date/to_date: drop if empty
   * - page: default to 1
+  * - Date guards: ensure from_date <= to_date when both present; clamp any future date to today
   */
  function normalizeParams(params = {}) {
    const {
@@ -51,27 +67,48 @@
      page,
    } = params || {};
  
+   // helper to clamp YYYY-MM-DD to today if in the future
+   const clampToToday = (d) => {
+     if (!d) return undefined;
+     const today = new Date();
+     const dObj = new Date(d);
+     if (Number.isNaN(dObj.getTime())) return undefined;
+     const todayYMD = today.toISOString().slice(0, 10);
+     const dYMD = dObj.toISOString().slice(0, 10);
+     return dYMD > todayYMD ? todayYMD : dYMD;
+   };
+ 
+   let fd = from_date || undefined;
+   let td = to_date || undefined;
+   fd = clampToToday(fd);
+   td = clampToToday(td);
+ 
+   // If both dates exist and out of order, swap them
+   if (fd && td && fd > td) {
+     const tmp = fd;
+     fd = td;
+     td = tmp;
+   }
+ 
    const normalized = {
-     // Normalize category: "all" or falsy -> undefined
      category:
        category && typeof category === 'string' && category.toLowerCase() !== 'all'
          ? category
          : undefined,
-     // Trim q and drop if empty
-     q:
-       typeof q === 'string' && q.trim().length > 0
-         ? q.trim()
-         : undefined,
+     q: typeof q === 'string' && q.trim().length > 0 ? q.trim() : undefined,
      language: language || undefined,
      country: country || undefined,
-     from_date: from_date || undefined,
-     to_date: to_date || undefined,
+     from_date: fd,
+     to_date: td,
      page: Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1,
    };
  
    return normalized;
  }
  
+ /**
+  * Helper to build query strings by removing empty params and adding apikey.
+  */
  function buildParams(params) {
    const q = new URLSearchParams();
    Object.entries(params).forEach(([k, v]) => {
@@ -86,9 +123,6 @@
   * - If there is no q and no filters (language, country, from_date, to_date), and category is absent,
   *   then use "/latest".
   * - Otherwise use "/news".
-  *
-  * This matches: use `${REACT_APP_NEWSDATA_BASE_URL}/latest` when no query/filters;
-  * otherwise use `${REACT_APP_NEWSDATA_BASE_URL}/news`.
   */
  function chooseEndpointPath(norm) {
    const hasQuery = !!norm.q;
@@ -100,13 +134,13 @@
  
  /**
   * PUBLIC_INTERFACE
-  * fetchArticles - Fetch articles from Newsdata.io.
+  * fetchArticles - Fetch articles from Newsdata.io with safe parameterization and error surfacing.
   *
   * Behavior:
-  * - Uses /latest when there is no query and no filters (and no specific category).
-  * - Uses /news otherwise (any query or any filter or a specific category).
-  * - Appends apikey from REACT_APP_NEWSDATA_API_KEY.
-  * - Omits empty parameters and URL encodes values.
+  * - /latest: only apikey, page, and optionally language/country. Never send category/from_date/to_date.
+  * - /news: include non-empty params. q is optional and only included when provided.
+  * - Dates are optional; if both provided and out of order, they are swapped; future dates clamped to today.
+  * - Empty or unsupported params are removed to avoid 422 errors.
   *
   * Params:
   * - category?: string | 'all'
@@ -116,22 +150,31 @@
   * - from_date?: string (YYYY-MM-DD)
   * - to_date?: string (YYYY-MM-DD)
   * - page?: number (pagination)
+  *
+  * Returns JSON from Newsdata or mock results when API key is missing.
+  * Throws Error with message containing API error details for UI surfacing.
   */
  export async function fetchArticles(params = {}) {
    const base = BASE || DEFAULT_BASE;
    const norm = normalizeParams(params);
    const path = chooseEndpointPath(norm);
  
-   // Build query object (omit empty)
-   const query = {
-     category: norm.category,
-     q: norm.q,
-     language: norm.language,
-     country: norm.country,
-     from_date: norm.from_date,
-     to_date: norm.to_date,
-     page: norm.page,
-   };
+   // Construct query respecting endpoint capabilities
+   let query = { page: norm.page };
+   if (path === '/latest') {
+     // Supported params for /latest: apikey, page; some accounts support language/country
+     if (norm.language) query.language = norm.language;
+     if (norm.country) query.country = norm.country;
+     // Explicitly avoid: category, from_date, to_date
+   } else {
+     // /news supports filters
+     if (norm.category) query.category = norm.category;
+     if (norm.q) query.q = norm.q;
+     if (norm.language) query.language = norm.language;
+     if (norm.country) query.country = norm.country;
+     if (norm.from_date) query.from_date = norm.from_date;
+     if (norm.to_date) query.to_date = norm.to_date;
+   }
  
    const url = `${base.replace(/\/$/, '')}${path}?${buildParams(query)}`;
  
@@ -152,7 +195,8 @@
      };
    }
  
-   return fetchWithRetry(url);
+   // Avoid aggressive retries to prevent repeated 4xx. Let UI handle message.
+   return safeFetchJson(url);
  }
  
  // PUBLIC_INTERFACE

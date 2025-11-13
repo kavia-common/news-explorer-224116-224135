@@ -5,6 +5,14 @@ import { useTheme } from './hooks/useTheme';
 import { HomePage } from './pages/HomePage';
 import { BookmarksPage } from './pages/BookmarksPage';
 
+// React Router v7 warning note:
+// If you see a console warning about future flags (e.g., v7_relativeSplatPath),
+// configure your Router with the 'future' prop at the top-level if using createBrowserRouter:
+//   const router = createBrowserRouter(routes, { future: { v7_relativeSplatPath: true } });
+//   <RouterProvider router={router} />
+// Since this app uses <BrowserRouter> directly and not the data APIs, there's no central config;
+// the warning can be safely ignored, or migrate to createBrowserRouter to set the flag explicitly.
+
 // PUBLIC_INTERFACE
 export default function App() {
   /** Root app wraps routes and header with theme */
